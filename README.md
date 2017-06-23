@@ -1,5 +1,5 @@
 # Cordar
-Cordar is a simple human-readable data representation format that I created. It was inspired by json, but is much simpler and easier to use (in my opinion of course). The name cordar, pronounced like "quarter", is short for *Corbin's Data Representation*.
+Cordar is a simple human-readable data representation format. It was inspired by json, but is much simpler and easier to use (in my opinion of course). It is also similar in YAML, but again more basic. The name cordar, pronounced like "quarter", is short for *Corbin's Data Representation*.
 
 This repository includes a C++ parser for loading the data from file or stream and easily manipulating it. The parser is called cCordar. It has no external dependencies.
 
@@ -48,11 +48,11 @@ std::string age = parser["Age"];
 std::string ssn = parser["SSN"];
 std::cout << name << " " << age << " " << ssn;
 ```
-The output would be `Fred 30 `. Notice that strings do not have quotes around them in the cordar file. In fact, all values are only treated as strings. If you would like to treat the Age value in this example as an integer, you would need to convert it using something like `std::stod(parser["Age"]);`.
+This example would print `Fred 30 ` to the console. Notice that cCordar treats all values as strings. If you would like to treat the Age value in this example as an integer, it would need to be converted using something like `std::stod(parser["Age"]);`.
 
 Also notice that no error is thrown by requesting a property that does not exist (in this case, "SSN"). Calling `parser["SSN"]` will implicitly create that key with an empty value. 
 
-### Named Groups
+### Named Groups/Dictionaries
 test.cor file:
 ```
 # Note the colon after the group name
@@ -102,10 +102,10 @@ parser.LoadFile("test.cor");
 std::string name = parser["Person"][1]["Name"];
 ```
 In this example, `name` would contain `Bob`. A couple of other notable things in this example:
-* The cCordar parser does not enforce that each element of the array contain the same key/value pairs.
-* `parser["Person"]["Name"]` is equivalent to `parser["Person"][0]["Name"]`. This means that a simple non-array named group, such as the one in the first Named Group example, can also be interpreted as an array of size 1.
+* The cCordar parser does not enforce that each element of the array contain the same key/value pairs. There is also no built-in schema functionality.
+* You may notice the array syntax in cordar makes it easy grow the array. Simply tack on an additional set of curly braces to add an element to the array. In fact, a normal named group or dictionary, such as the one in the previous example, can already be considered an array of size 1. For simplicity, the array index can be omitted in that case. `parser["Person"]["Name"]` is equivalent to `parser["Person"][0]["Name"]`.
 
-### Simple Array
+### Simple Array/List
 test.cor file:
 ```
 Names:
@@ -123,7 +123,7 @@ cCordar parser;
 parser.LoadFile("test.cor");
 std::string name = parser["Names"][1];
 ```
-In this example, `name` would contain `Bob`.
+In this example, `name` would contain `Bob`. The cordar representation of arrays/lists looks very similar to named groups and named group arrays for easy readability.
 
 ### Nested Named Groups
 test.cor file:
@@ -145,6 +145,12 @@ parser.LoadFile("test.cor");
 std::string food = parser["Person"]["Favorites"]["Food"];
 ```
 In this example, `food` would contain `BBQ`. Other than available memory, there is no limit to the number of nested groups.
+
+As mentioned in a previous example, the data could optionally be accessed in the following way as well:
+```c++
+std::string food = parser["Person"][0]["Favorites"][0]["Food"];
+```
+This is because these named groups could also be considered an array of size 1. This alternative method is explicitly indexing into the 0th (first) location of the array. Omitting the index implies index 0.
 
 ## Additional Parser Features
 The previous sections contain all of the features of the cordar data format. This section describes some additional features the parser provides in order to better programmatically manipulate the data.
@@ -175,8 +181,13 @@ size_t topLevelSize = parser.Size();
 size_t arraySize = parser["Person"].Size();
 size_t groupSize = parser["Person"][0].Size();
 size_t valueSize = parser["Person"][0]["HairColor"].Size();
+size_t stringSize = static_cast<std::string>(parser["Person"][0]["HairColor"]).size();
 ```
-`topLevelSize` would equal 2 (because of "Person" and "Dog"), `arraySize` would equal 2 (because of the 2 array elements in "Person"), `groupSize` would contain 3, and `valueSize` would contain 1. As the example shows, when requesting the size of an array, the number of indexes in the array is what is returned. It does not include all of the "children". Also, requesting the size of a single element will always return 1 if the element does not have an empty value because there is always at max 1 value. The length of the value string can be obtained after casting the value to a string.
+* `topLevelSize` would equal 2 because of "Person" and "Dog".
+* `arraySize` would equal 2 because of the 2 array elements in "Person".
+* `groupSize` would equal 3 Because of the "Name", "Age", and "HairColor" key/value pairs.
+* `valueSize` would equal 1. "HairColor" has 1 value, being "Brown".
+* `stringSize` would equal 5 because the string "Brown" has 5 characters.
 
 ### Getting a Property by Index
 test.cor file:
@@ -199,27 +210,45 @@ parser.LoadFile("test.cor");
 std::pair<std::string, cCordar> keyValuePair;
 keyValuePair = parser["Person"].GetPropertyByIndex(2);
 ```
-In this example, `keyValuePair.first` would contain the string "Favorites" and `keyValuePair.second` would contain a copy of the remaining Favorites structure. For example, `keyValuePair.second[Food]` could be casted to a std::string to produce "BBQ".
-**Note: The order of elements returned by GetPropertyByIndex() is not guaranteed in any way.** Internally cCordar stores these values in an std::map. This function is most useful when combined with `Size()` in order to iterate over all of the elements.
+In this example, `keyValuePair.first` could contain the string "Favorites" and `keyValuePair.second` would contain a copy of the remaining Favorites structure. For example, `keyValuePair.second[Food]` could be cast to a std::string to produce "BBQ".
+**Note: The order of elements returned by GetPropertyByIndex() is not guaranteed in any way. This is similar to iterating over a std::map.** This function is most useful when combined with `Size()` in order to iterate over all of the elements.
 
 ### Serialize/Flatten data to file
 main.cpp file:
 ```c++
 cCordar parser;
 // Groups and keys can be implicitly created, and strings can be assigned.
-parser["Group"]["Key1"] = "Value1";
-parser["Group"]["Key2"] = "Value2";
+parser["Group1"]["Key1"] = "Value1";
+parser["Group1"]["Key2"] = "Value2";
+parser["Group2"] = "Value3";
+parser["Group3"]["Group4"]["Key3"] = "Value4";
+parser["Group3"]["Group4"][1]["Key4"] = Value5;
+
 parser.SerializeToFile("Output.cor");
 ```
 output.cor file:
 ```
-Group:
+Group1:
 {
    Key1: Value1
    Key2: Value2
 }
+Group2: Value3
+Group3:
+{
+   Group4:
+   {
+      Key3: Value4
+   }
+   {
+      Key4: Value5
+   }
+}
+
 ```
-The order of `Key1` and `Key2` is not guaranteed. There is also a function to output the data to an ostream instead with the following function signiture:
+Note that the order the data gets serialized to by cCordar is not guaranteed. For example, `Key2: Value2` may come before `Key1: Value1` within `Group1` once serialized to file.
+
+There is also a function to output the data to an ostream instead with the following function signiture:
 ```c++
 void cCordar::SerializeToStream(std::ostream& a_rStream)
 ```
